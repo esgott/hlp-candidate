@@ -32,7 +32,9 @@ import java.util.StringTokenizer;
 public class Script {
     private final byte[] bytes;
 
-    public Script() {
+    public static final Script EMPTY = new Script();
+
+    private Script() {
         this.bytes = new byte[0];
     }
 

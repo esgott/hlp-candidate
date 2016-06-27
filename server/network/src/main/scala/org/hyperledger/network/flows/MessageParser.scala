@@ -20,6 +20,7 @@ import akka.stream.stage._
 import akka.util.ByteString
 import org.hyperledger.network.Messages
 import Messages.BlockchainMessage
+import akka.NotUsed
 import org.hyperledger.network.Messages
 
 object MessageParser {
@@ -27,7 +28,7 @@ object MessageParser {
 
   val DEFAULT_MESSAGE_LENGTH_LIMIT = 1024 * 1024 * 32
   def messagePayloadDecoder(magic: Int,
-                            maximumMessageLength: Int = DEFAULT_MESSAGE_LENGTH_LIMIT): Flow[ByteString, BlockchainMessage, Unit] =
+                            maximumMessageLength: Int = DEFAULT_MESSAGE_LENGTH_LIMIT): Flow[ByteString, BlockchainMessage, NotUsed] =
     Flow[ByteString]
       .transform(() => new BitcoinMessageStage(magic, maximumMessageLength))
       .log("Incoming message", _.toString.take(160))

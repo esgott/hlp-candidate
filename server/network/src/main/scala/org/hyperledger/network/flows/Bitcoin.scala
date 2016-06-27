@@ -111,7 +111,7 @@ object Bitcoin {
     .map { req =>
       val headers = api
         .catchupHeaders(req.locatorHashes, req.hashStop, GET_HEADERS_LIMIT)
-        .map(api.fetchHeader)
+        .flatMap(api.fetchHeader)
 
       if (CoreAssemblyFactory.getAssembly.getBlockSignatureConfig.enabled()) {
         SignedHeadersMessage(headers.map(_.getHeader.asInstanceOf[HeaderWithSignatures]))

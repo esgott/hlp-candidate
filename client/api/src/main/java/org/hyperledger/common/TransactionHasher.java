@@ -37,7 +37,7 @@ public class TransactionHasher {
         for (TransactionInput in : t.getInputs()) {
             TransactionInput.Builder tbuilder = TransactionInput.create()
                     .source(new Outpoint(in.getSourceTransactionID(), in.getOutputIndex()));
-            tbuilder.script(i == inr ? script : new Script());
+            tbuilder.script(i == inr ? script : Script.EMPTY);
             tbuilder.sequence(in.getSequence());
             inputs.add(tbuilder.build());
             ++i;
@@ -69,7 +69,7 @@ public class TransactionHasher {
             List<TransactionOutput> modifiedOutputs = new ArrayList<>();
             for (i = 0; i < inr; ++i) {
                 modifiedOutputs.add(
-                        TransactionOutput.create().script(new Script()).value(-1).build()
+                        TransactionOutput.create().script(Script.EMPTY).value(-1).build()
                 );
             }
             modifiedOutputs.add(outputs.get(inr));

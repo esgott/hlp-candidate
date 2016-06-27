@@ -70,7 +70,7 @@ class PbftServer(bindAddress: InetSocketAddress) extends Actor with ActorLogging
       log.debug(s"Trying to connect to $nodeConfig")
       val (conn, version, broadcaster) = Tcp(context.system)
         .outgoingConnection(nodeConfig.address)
-        .joinMat(PbftStreams.createFlow(settings, pbft.blockStoreConn, pbft.versionP, handler, ourVersion, outbound = true))(keep3)
+        .joinMat(PbftStreams.createFlow(settings, pbft.blockStoreConn, pbft.versionP, context.self, handler, ourVersion, outbound = true))(keep3)
         .run()
 
       conn.map(q => NewConnection(broadcaster, q.remoteAddress))
@@ -81,7 +81,7 @@ class PbftServer(bindAddress: InetSocketAddress) extends Actor with ActorLogging
     }
 
     Tcp(context.system).bind(address.getHostString, address.getPort).runForeach { connection =>
-      val flow = PbftStreams.createFlow(settings, pbft.blockStoreConn, pbft.versionP, handler, ourVersion, outbound = false)
+      val flow = PbftStreams.createFlow(settings, pbft.blockStoreConn, pbft.versionP, context.self, handler, ourVersion, outbound = false)
       val (versionFuture, broadcaster) = connection.handleWith(flow)
 
       versionFuture.map(v => HandshakeComplete(connection.remoteAddress, v, broadcaster)).pipeTo(self)

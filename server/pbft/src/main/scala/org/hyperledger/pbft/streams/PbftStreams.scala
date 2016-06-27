@@ -17,19 +17,18 @@ import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.stream._
 import akka.stream.scaladsl._
-import akka.util.Timeout
-import org.hyperledger.common.{ Block, Transaction }
+import akka.util.{ByteString, Timeout}
+import org.hyperledger.common.{Block, Transaction}
 import org.hyperledger.network.Implicits._
-import org.hyperledger.network.InventoryVectorType.{ MSG_BLOCK, MSG_TX }
+import org.hyperledger.network.InventoryVectorType.{MSG_BLOCK, MSG_TX}
+import org.hyperledger.network._
 import org.hyperledger.network.flows.ScodecStage
-import org.hyperledger.network.{ BlockDataRequest, InventoryVector, Rejection, Version }
 import org.hyperledger.pbft.PbftHandler.UpdateViewSeq
 import org.hyperledger.pbft.RecoveryActor.NewHeaders
 import org.hyperledger.pbft._
 import org.slf4j.LoggerFactory
-import scodec.Attempt
 
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.{ExecutionContext, Future}
 import scalaz.\/
 
 object PbftStreams {
@@ -41,54 +40,84 @@ object PbftStreams {
   val NETWORK_MAGIC = 1
   val HEADERS_MAX_SIZE = 1000
 
+  /**
+    * Creates the akka stream flow for the PBFT server. The materialized value for the returned flow is:
+    * - A Future of Version, which will be completed after a successful handshake, and will return with the peer's Version
+    * - An ActorRef, which can be used to send PbftMessages to the peer
+    *
+    * The `broadcaster` parameter, which can be used by this logic to broadcast messages to other peers is a hack. It
+    * is needed because we can't listen to mempool transaction events, because ClientEventQueue only contains one queue,
+    * which is consumed by the BCSAPIServer to send out TransactionEvents. If ClientEventQueue was an EventBus like
+    * functionality, we could use that at the PbftServer level to broadcast transaction events to peers.
+    * @return
+    */
   def createFlow(settings: PbftSettings,
     store: PbftBlockstoreInterface,
     versionP: Version => String \/ Unit,
+    broadcaster: ActorRef,
     handler: ActorRef,
     ourVersion: Version,
-    outbound: Boolean)(implicit ec: ExecutionContext) = {
+    outbound: Boolean)(implicit ec: ExecutionContext): Flow[ByteString, ByteString, (Future[Version], ActorRef)] = {
     val handshake = new HandshakeStage(ourVersion, versionP, outbound)
 
     ScodecStage.bidi(PbftMessage.messageCodec(NETWORK_MAGIC))
       .atopMat(BidiFlow.fromGraph(handshake))(Keep.right)
-      .joinMat(createProtocolFlow(settings, store, handler))(Keep.both)
+      .joinMat(createProtocolFlow(settings, store, broadcaster, handler))(Keep.both)
+  }
+
+  type PbftMessagePF = PartialFunction[PbftMessage, PbftMessage]
+
+  val txInv: PartialFunction[PbftMessage, InvMessage] = {
+    case InvMessage(i) if i.exists(_.typ == MSG_TX) => InvMessage(i.filter(_.typ == MSG_TX))
+  }
+  val txAsInv: PartialFunction[PbftMessage, InvMessage] = {
+    case TxMessage(tx) => InvMessage(List(InventoryVector.tx(tx.getID)))
+  }
+
+  val allButTxIn: PbftMessagePF = {
+    case InvMessage(i) if i.exists(_.typ != MSG_TX) => InvMessage(i.filter(_.typ != MSG_TX))
+    case m => m
+  }
+
+  val consensusMessages: PbftMessagePF = {
+    case m: PrePrepareMessage => m
+    case m: PrepareMessage    => m
+    case m: CommitMessage     => m
+    case m: ViewChangeMessage => m
+    case m: NewViewMessage    => m
   }
 
   def createProtocolFlow(settings: PbftSettings,
     store: PbftBlockstoreInterface,
+    broadcastOut: ActorRef,
     handler: ActorRef)(implicit ec: ExecutionContext): Graph[FlowShape[PbftMessage, PbftMessage], ActorRef] = {
-    val broadcastSource = Source.actorRef(100, OverflowStrategy.dropHead)
+    val broadcastSource = Source.actorRef[PbftMessage](100, OverflowStrategy.dropHead)
     GraphDSL.create(broadcastSource) { implicit b =>
       broadcast =>
         import GraphDSL.Implicits._
 
-        val forwardFilter = Flow[PbftMessage].collect {
-          case m: PrePrepareMessage => m
-          case m: PrepareMessage    => m
-          case m: CommitMessage     => m
-          case m: ViewChangeMessage => m
-          case m: NewViewMessage    => m
-        }
-
-        val forwardToHandlerGen = Flow[PbftMessage]
+        val consensusFlow = Flow[PbftMessage].collect(consensusMessages)
           .mapAsync(1)(m => (handler ? m).mapTo[List[PbftMessage]])
           .mapConcat[PbftMessage](identity)
 
-        val txFlow = Flow[PbftMessage]
-          .collect { case tx: TxMessage => tx }
+        val txFlow = Flow[PbftMessage].collect { case tx: TxMessage => tx }
           .mapAsync(1) { tm =>
-            store.addTransactions(List(tm.payload))
-              .map(_._1.map(Rejection.invalidTx("invalid-tx")).map(RejectMessage))
+            val result = store.addTransactions(List(tm.payload))
+            // broadcast successful store
+            result.onSuccess[Unit] {
+              case (failure, success) if success.nonEmpty => broadcastOut ! InvMessage(success.map(InventoryVector.tx))
+            }
+
+            // Map failed store operations to RejectMessages. If tx is stored without failure this will be an empty list
+            result.map(_._1.map(Rejection.invalidTx("invalid-tx")).map(RejectMessage))
           }.mapConcat(identity)
 
-        val invFlow = Flow[PbftMessage]
-          .collect { case m: InvMessage => m }
+        val invFlow = Flow[PbftMessage].collect { case m: InvMessage => m }
           .mapAsync(1)(m => store.filterUnkown(m.payload).map(GetDataMessage))
 
         val getHeadersFlow = Flow[PbftMessage]
           .collect {
-            case GetHeadersMessage(BlockDataRequest(_, locatorHashes, hashStop)) =>
-              store.getHeadersAndCommits(locatorHashes, hashStop)
+            case GetHeadersMessage(BlockDataRequest(_, locatorHashes, hashStop)) => store.getHeadersAndCommits(locatorHashes, hashStop)
           }.mapConcat(_.fold(
             err => {
               LOG.error(s"Error when reading commits: ${err.message}")
@@ -131,15 +160,14 @@ object PbftStreams {
             case _ => Future.successful(Nil)
           }.mapConcat(identity)
 
-        val blockFlow = Flow[PbftMessage]
-          .mapAsync(1) {
-            case BlockMessage(block) =>
-              store.hasBlock(block.getID).filter { _ == false }
-                .flatMap { _ => store.validateBlock(block) }.filter { _ == true }
-                .flatMap { _ => store.storeBlock(block) }
-                .map { _ => List.empty[PbftMessage] }
-            case _ => Future.successful(Nil)
-          }.mapConcat(identity)
+        val blockFlow = Flow[PbftMessage].collect { case BlockMessage(block) => block }
+          .mapAsync(1)( block => for {
+              hasBlock <- store.hasBlock(block.getID) if !hasBlock
+              valid <- store.validateBlock(block) if valid
+              stored <- store.storeBlock(block)
+              (failed, storedBlocks) = stored
+            } yield failed)
+          .mapConcat(_.map(failedBid => RejectMessage(Rejection.invalidBlock("InvalidBlock")(failedBid))))
 
         val getDataFlow = Flow[PbftMessage]
           .mapConcat {
@@ -158,19 +186,29 @@ object PbftStreams {
 
         val verifySig = b.add(Flow[PbftMessage].transform(() => new VerifySignatureStage(settings)))
 
-        val inputRoute = b.add(Broadcast[PbftMessage](7))
-        val outMerge = b.add(Merge[PbftMessage](8, eagerClose = true))
+        val inputRoute = b.add(Broadcast[PbftMessage](8))
+        val outMerge = b.add(Merge[PbftMessage](9, eagerComplete = true))
+
+        val broadcastSplit = b.add(Broadcast[PbftMessage](2))
+        val txInvCache = Flow[PbftMessage].collect(txInv orElse txAsInv)
+        val txInvBroadcast = Flow[PbftMessage].collect(txInv)
+        val nonTxInv = Flow[PbftMessage].collect(allButTxIn)
+        val txTracker = b.add(InventoryTracker(100))
 
         // format: OFF
         //inputLogger ~>
-        verifySig ~> inputRoute ~> forwardFilter ~> forwardToHandlerGen ~> outMerge
-                     inputRoute ~> txFlow                               ~> outMerge //~> outputLogger
-                     inputRoute ~> invFlow                              ~> outMerge
-                     inputRoute ~> getDataFlow                          ~> outMerge
-                     inputRoute ~> getHeadersFlow                       ~> outMerge
-                     inputRoute ~> headersFlow                          ~> outMerge
-                     inputRoute ~> blockFlow                            ~> outMerge
-                                   broadcast                            ~> outMerge
+        verifySig ~> inputRoute     ~> consensusFlow                                     ~> outMerge
+                     inputRoute     ~> invFlow                                           ~> outMerge
+                     inputRoute     ~> getDataFlow                                       ~> outMerge
+                     inputRoute     ~> getHeadersFlow                                    ~> outMerge
+                     inputRoute     ~> headersFlow                                       ~> outMerge
+                     inputRoute     ~> txFlow                                            ~> outMerge //~> outputLogger
+                     inputRoute     ~> blockFlow                                         ~> outMerge
+                     inputRoute     ~> txInvCache       ~> txTracker.peerInput
+        broadcast ~> broadcastSplit ~> txInvBroadcast   ~> txTracker.broadcastInput
+                                                           txTracker.out                 ~> outMerge
+                     broadcastSplit ~> nonTxInv                                          ~> outMerge
+
         // format: ON
 
         //FlowShape(inputLogger.in, outputLogger.out)
@@ -178,5 +216,4 @@ object PbftStreams {
     }
   }
 
-  case class ProtocolError(message: String) extends Exception(message)
 }

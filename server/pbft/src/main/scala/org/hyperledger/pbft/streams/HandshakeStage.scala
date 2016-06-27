@@ -13,7 +13,6 @@
  */
 package org.hyperledger.pbft.streams
 
-import akka.stream.stage.GraphStageLogic.StageActorRef
 import akka.stream.stage._
 import akka.stream.{Attributes, BidiShape, Inlet, Outlet}
 import org.hyperledger.network.{RejectCode, Rejection, Version}
@@ -52,8 +51,6 @@ class HandshakeStage(ourVersion: Version, versionP: HandshakeStage.VersionP, out
     val logic = new GraphStageLogic(shape) {
       protected var theirVersion: Option[Version] = None
       protected var ack = false
-
-      var self: StageActorRef = _
 
       override def preStart(): Unit = {
         if (outbound) {

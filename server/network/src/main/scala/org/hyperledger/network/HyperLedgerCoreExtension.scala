@@ -81,7 +81,7 @@ trait HyperLedger {
   def addTransactions(txs: List[Transaction]): Future[(List[TID], List[TID])]
   def fetchTx(h: TID): Future[Option[Transaction]]
   def fetchBlock(h: BID): Future[Option[Block]]
-  def fetchHeader(h: BID): StoredHeader
+  def fetchHeader(h: BID): Option[StoredHeader]
   def mempool(): Future[List[TID]]
   def alert(alert: Alert, sig: BitVector): Unit
   def reject(r: Rejection): Unit
@@ -145,11 +145,11 @@ class HyperLedgerAkka(system: ActorSystem, core: CoreAssembly, implicit val exec
     }
   }
 
-  def fetchTx(h: TID): Future[Option[Transaction]] = Future(Some(blockStore.getTransaction(h)))
+  def fetchTx(h: TID): Future[Option[Transaction]] = Future(Option(blockStore.getTransaction(h)))
 
   def fetchBlock(h: BID): Future[Option[Block]] = Future(Option(blockStore.getBlock(h)))
 
-  def fetchHeader(h: BID): StoredHeader = blockStore.getHeader(h)
+  def fetchHeader(h: BID): Option[StoredHeader] = Option(blockStore.getHeader(h))
 
   def mempool(): Future[List[TID]] = Future(blockStore.getMempoolContent.asScala.toList.map(_.getID))
 

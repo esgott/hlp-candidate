@@ -17,16 +17,17 @@ package org.hyperledger.network.flows
 import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
-import akka.stream.{ OverflowStrategy, ActorMaterializer }
-import akka.stream.scaladsl.{ Keep, Sink, Source }
-import akka.testkit.{ TestKit, ImplicitSender }
-import org.hyperledger.network.Messages.{VerackMessage, PongMessage, PingMessage}
+import akka.stream.QueueOfferResult.Enqueued
+import akka.stream.{ActorMaterializer, OverflowStrategy}
+import akka.stream.scaladsl.{Keep, Sink, Source}
+import akka.testkit.{ImplicitSender, TestKit}
+import org.hyperledger.network.Messages.{PingMessage, PongMessage, VerackMessage}
 import org.hyperledger.network.Ping
-import org.scalatest.{ FunSpecLike, BeforeAndAfter, Matchers }
+import org.scalatest.{BeforeAndAfter, FunSpecLike, Matchers}
 
-import scala.concurrent.{Channel, Future, Await}
+import scala.concurrent.{Await, Channel, Future}
 import scala.concurrent.duration._
-import scala.util.{ Success, Failure }
+import scala.util.{Failure, Success}
 import scala.language.postfixOps
 
 class PingPongStageTest extends TestKit(ActorSystem("InitialBlockDownloadStageTest"))
@@ -60,7 +61,7 @@ class PingPongStageTest extends TestKit(ActorSystem("InitialBlockDownloadStageTe
       val (in, out) = testflow
       val Some(PingMessage(Ping(nonce1))) = Await.result(out.pull(), 100 millis)
       val consumed1 = Await.result(in.offer(PongMessage(Ping(nonce1))), 100 millis)
-      consumed1 shouldBe true
+      consumed1 shouldBe Enqueued
 
       monitorChannel.read
       reportedPingTimes.size shouldBe 1

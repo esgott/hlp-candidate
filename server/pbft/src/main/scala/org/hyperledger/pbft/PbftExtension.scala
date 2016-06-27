@@ -69,7 +69,7 @@ class PbftExtension(system: ExtendedActorSystem) extends Extension {
 
 trait PbftBlockstoreInterface {
   def fetchTx(tid: TID): Future[Option[Transaction]]
-  def fetchHeader(h: BID): StoredHeader
+  def fetchHeader(h: BID): Option[StoredHeader]
   def fetchBlock(h: BID): Future[Option[Block]]
   def filterUnkown(inventories: List[InventoryVector]): Future[List[InventoryVector]]
   def hasBlock(blockId: BID): Future[Boolean]
@@ -146,11 +146,11 @@ class PbftBlockstoreConnection(hyperLedger: HyperLedger,
 
   def getHeadersAndCommits(locatorHashes: List[BID], hashStop: BID) = {
     val headersAndCommits = catchUpHeaders(locatorHashes, hashStop, Int.MaxValue)
-      .map { id => (id, hyperLedger.blockStore.getMiscData(id)) }
+      .flatMap(fetchHeader)
+      .map { header => (header, hyperLedger.blockStore.getMiscData(header.getID)) }
       .filter(_._2 != null)
-      .map { t =>
-        val header = fetchHeader(t._1)
-        val commits = codecs.varIntSizeSeq(Commit.codec).decode(BitVector(t._2)) map { _.value }
+      .map { case (header, misc) =>
+        val commits = codecs.varIntSizeSeq(Commit.codec).decode(BitVector(misc)) map { _.value }
         (header, commits)
       }
       .map(attemptTuple)

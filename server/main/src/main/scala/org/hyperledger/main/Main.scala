@@ -22,6 +22,8 @@ import org.hyperledger.connector.InMemoryConnectorFactory
 import org.hyperledger.jms.JMSConnectorFactory
 import org.hyperledger.network.HyperLedgerExtension
 
+import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.io.Source
 
 object Main extends App {
@@ -56,8 +58,8 @@ object Main extends App {
       //      bcsapiServer.destroy()
 
       system.log.info("Shutting down HyperLedger Core Services")
-      system.shutdown()
-      system.awaitTermination()
+      val terminate = system.terminate()
+      Await.ready(terminate, 60.seconds)
     }
 
     bcsapiServer

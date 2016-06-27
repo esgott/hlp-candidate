@@ -13,20 +13,21 @@
  */
 package org.hyperledger.network.server
 
-import java.net.{ InetAddress, InetSocketAddress }
+import java.net.{InetAddress, InetSocketAddress}
 import java.time.Clock
 
 import akka.actor._
+import akka.io.Inet
 import akka.pattern._
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{ Flow, Keep, Tcp }
+import akka.stream.scaladsl.{Flow, Keep, Tcp}
 import akka.util.Timeout
-import org.hyperledger.common.{ Header, Transaction }
+import org.hyperledger.common.{Header, Transaction}
 import org.hyperledger.network.Messages._
 import org.hyperledger.network.RejectCode.REJECT_OBSOLETE
 import org.hyperledger.network.flows._
 import org.hyperledger.network.server.ServerActor._
-import org.hyperledger.network.{ HyperLedgerExtension, Version, _ }
+import org.hyperledger.network.{HyperLedgerExtension, Version, _}
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.Future
@@ -137,7 +138,12 @@ class ConnectionManager extends Actor with ActorLogging {
       import context.dispatcher
       implicit val mat = ActorMaterializer()
 
-      val connections = Tcp(context.system).bind(address.getHostString, address.getPort)
+      val connections = Tcp(context.system).bind(
+        interface = address.getHostString,
+        port = address.getPort,
+        options = List(Inet.SO.ReuseAddress(true))
+      )
+
       connections.runForeach { connection =>
         val peerActor = context.actorOf(PeerConnection.props(connection.remoteAddress, inbound = true))
         val peerInterface = new DefaultPeerInterface(true, versionToSend, peerActor, hyperLedger.api)

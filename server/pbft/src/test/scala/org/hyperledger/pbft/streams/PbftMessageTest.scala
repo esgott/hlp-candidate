@@ -59,13 +59,14 @@ class PbftMessageTest extends TestKit(ActorSystem("test", ConfigFactory.load(Con
 
   val broadcaster = TestProbe()
   val miner = TestProbe()
+  val broadcastOut = TestProbe()
   val handler = system.actorOf(PbftHandler.props(broadcaster.ref, miner.ref))
   val address = new InetSocketAddress(InetAddress.getLocalHost, 8551)
 
   val ourVersion = HandshakeStageTest.createVersion(4)
   val theirVersion = HandshakeStageTest.createVersion(0)
 
-  val flow = PbftStreams.createFlow(settings, store, extension.versionP, handler, ourVersion, outbound = true)
+  val flow = PbftStreams.createFlow(settings, store, extension.versionP, broadcastOut.ref, handler, ourVersion, outbound = true)
   val codec = PbftMessage.messageCodec(PbftStreams.NETWORK_MAGIC)
 
   "Sending in a PrePrepare to the flow" should {

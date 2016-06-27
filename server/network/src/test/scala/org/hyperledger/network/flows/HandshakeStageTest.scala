@@ -13,14 +13,15 @@
  */
 package org.hyperledger.network.flows
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.NotUsed
+import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl._
 import akka.testkit.TestKit
 import org.hyperledger.network.Messages._
 import org.hyperledger.network.RejectCode.REJECT_OBSOLETE
 import org.hyperledger.network._
-import HandshakeStage._
+import org.hyperledger.network.flows.HandshakeStage._
 import org.hyperledger.network.server.PeerInterface
 import org.hyperledger.network.server.PeerInterface.{Misbehavior, UnexpectedMessage}
 import org.scalatest.{FunSpecLike, Matchers}
@@ -70,7 +71,7 @@ class HandshakeStageTest extends TestKit(ActorSystem("HandshakeStageTest")) with
   }
 
   def stageUnderTest(peer: TestPeerInterface) = new HandshakeStage(peer, handler)
-  def testflow(appFlow: Flow[BlockchainMessage, BlockchainMessage, Unit], stage: HandshakeStage[BlockchainMessage], input: BlockchainMessage*) = {
+  def testflow(appFlow: Flow[BlockchainMessage, BlockchainMessage, NotUsed], stage: HandshakeStage[BlockchainMessage], input: BlockchainMessage*) = {
     Source(input.toList)
       .via(BidiFlow.fromGraph(stage).join(appFlow))
       .toMat(Sink.seq[BlockchainMessage])(Keep.right)
@@ -146,7 +147,7 @@ object HandshakeStageTest {
 //    3, relay = true)
 
   def defaultAppFlow = Flow[BlockchainMessage]
-  def producingAppFlow(elems: BlockchainMessage*): Flow[BlockchainMessage, BlockchainMessage, Unit] = {
+  def producingAppFlow(elems: BlockchainMessage*): Flow[BlockchainMessage, BlockchainMessage, NotUsed] = {
     Flow.fromSinkAndSource(Sink.ignore, Source.apply[BlockchainMessage](elems.toList))
   }
 }

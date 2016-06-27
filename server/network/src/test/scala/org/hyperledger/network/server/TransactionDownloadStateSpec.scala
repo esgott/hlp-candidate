@@ -21,7 +21,7 @@ import org.scalatest._
 import scala.collection.JavaConverters._
 
 class TransactionDownloadStateSpec extends FunSpec with Matchers {
-  case class InputStub(sourceHash: TID) extends TransactionInput(new Outpoint(sourceHash, 0), 0, new Script) {
+  case class InputStub(sourceHash: TID) extends TransactionInput(new Outpoint(sourceHash, 0), 0, Script.EMPTY) {
     override def getSourceTransactionID = sourceHash
   }
   case class TxStub(hash: TID, dependencies: List[TID]) extends Transaction(1, 1, dependencies.map(InputStub).asJava, Collections.emptyList(), hash) {

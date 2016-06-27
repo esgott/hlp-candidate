@@ -15,10 +15,11 @@ package org.hyperledger.pbft.streams
 
 import java.net.{InetAddress, InetSocketAddress}
 
+import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl._
-import org.hyperledger.network.{Version, NetworkAddress}
+import org.hyperledger.network.{NetworkAddress, Version}
 import org.hyperledger.pbft._
 import org.scalatest._
 
@@ -26,7 +27,7 @@ import scala.concurrent.{Await, Future}
 import scala.util.Failure
 import scalaz.{-\/, \/-}
 
-class HandshakeStageTest extends FunSpec with Matchers with BeforeAndAfterAll {
+class HandshakeStageTest extends FunSpec with Matchers {
   import scala.concurrent.duration._
   import HandshakeStageTest._
 
@@ -38,7 +39,7 @@ class HandshakeStageTest extends FunSpec with Matchers with BeforeAndAfterAll {
   val theirVersion = createVersion(0)
   val obsoleteVersion = createVersion(100)
 
-  type AppFlow = Flow[PbftMessage, PbftMessage, Unit]
+  type AppFlow = Flow[PbftMessage, PbftMessage, NotUsed]
 
   def defaultAppFlow: AppFlow = Flow[PbftMessage]
   def producingAppFlow(elems: PbftMessage *): AppFlow = {

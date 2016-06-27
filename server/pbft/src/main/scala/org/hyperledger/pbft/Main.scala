@@ -19,6 +19,8 @@ import akka.actor.ActorSystem
 import com.typesafe.config.ConfigFactory
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 
+import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.io.Source
 
 object Main extends App {
@@ -41,8 +43,8 @@ object Main extends App {
   }
 
   sys.addShutdownHook {
-    actorSystem.shutdown()
-    actorSystem.awaitTermination()
+    val termination = actorSystem.terminate()
+    Await.ready(termination, 60 seconds)
   }
 
 }

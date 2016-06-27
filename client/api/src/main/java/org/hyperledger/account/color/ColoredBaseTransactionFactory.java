@@ -287,7 +287,7 @@ public class ColoredBaseTransactionFactory implements ColoredTransactionFactory 
                 if (asset.isBeingDefined()) {
                     if (asset.getIndex() != sources.size())
                         throw new IllegalArgumentException("new asset definition indexes must start at zero and increment contiguously");
-                    sources.add(new Coin(Outpoint.NULL, new TransactionOutput(0, new Script())));
+                    sources.add(new Coin(Outpoint.NULL, new TransactionOutput(0, Script.EMPTY)));
                     sinks.add(receiver);
                     continue;
                 }

@@ -53,7 +53,7 @@ public class ColoredBaseTransactionFactoryTest extends TestCase {
     @Test
     public void testGetSufficientSources() throws Exception {
         Color color = new ForeignAsset(PrivateKey.createNew().getAddress());
-        Coin coin = new Coin(new Outpoint(TID.INVALID, 0), new ColoredTransactionOutput(1000, new Script(), color, 100));
+        Coin coin = new Coin(new Outpoint(TID.INVALID, 0), new ColoredTransactionOutput(1000, Script.EMPTY, color, 100));
 
         setUpAccount(color, coin);
 
@@ -75,8 +75,8 @@ public class ColoredBaseTransactionFactoryTest extends TestCase {
     public Color setUpNative() throws HyperLedgerException {
         Transaction issueTx = Transaction.create().build();
         Color color = new NativeAsset(issueTx.getID(), 0);
-        Coin coin = new Coin(new Outpoint(TID.INVALID, 0), new ColoredTransactionOutput(0, new Script(), color, 100));
-        Coin tokenCoin = new Coin(new Outpoint(TID.INVALID, 1), new ColoredTransactionOutput(100000, new Script(), Color.BITCOIN, 0));
+        Coin coin = new Coin(new Outpoint(TID.INVALID, 0), new ColoredTransactionOutput(0, Script.EMPTY, color, 100));
+        Coin tokenCoin = new Coin(new Outpoint(TID.INVALID, 1), new ColoredTransactionOutput(100000, Script.EMPTY, Color.BITCOIN, 0));
 
         setUpAccount(color, coin, tokenCoin);
         return color;

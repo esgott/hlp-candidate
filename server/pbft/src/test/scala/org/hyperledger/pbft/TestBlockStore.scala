@@ -62,7 +62,7 @@ class TestBlockStore extends PbftBlockstoreInterface {
 
   override def filterUnkown(inventories: List[InventoryVector]) = Future.successful(Nil)
 
-  override def fetchHeader(h: BID): StoredHeader = ???
+  override def fetchHeader(h: BID): Option[StoredHeader] = ???
 
   override def catchUpHeaders(bids: List[BID], hashStop: BID, limit: Int): List[BID] = ???
 

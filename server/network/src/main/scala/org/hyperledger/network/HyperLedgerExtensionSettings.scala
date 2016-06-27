@@ -34,6 +34,7 @@ class HyperLedgerExtensionSettings(fullConfig: Config) {
   val chain = config.getString("blockchain.chain") match {
     case "testnet3" => Testnet3BitcoinNetwork
     case "regtest" => RegtestBitcoinNetwork
+    case "privateregtest" => RegtestBitcoinNetwork
     case "production" => ProductionBitcoinNetwork
     case "signedregtest" => RegtestBitcoinNetwork
     case c => throw new BadValue("hyperledger.chain", s"Invalid blockchain configuration $c")

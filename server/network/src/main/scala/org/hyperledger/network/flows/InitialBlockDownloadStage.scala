@@ -62,7 +62,7 @@ class InitialBlockDownloadStage(ibdIF: IBDInterface, implicit val ec: ExecutionC
     var ibdRequests = Set.empty[BID]
 
     override def preStart(): Unit = {
-      self = getStageActorRef {
+      self = getStageActor {
         case (_, RequestBlockDownloadBatch(bids)) =>
           LOG.debug(s"Requesting batch download $bids")
           inIBD = true
@@ -73,7 +73,7 @@ class InitialBlockDownloadStage(ibdIF: IBDInterface, implicit val ec: ExecutionC
           inIBD = false
         case (_, ContinueAsNormal) => // ignore
         case m                     => LOG.warn("Unexpected message $m")
-      }
+      }.ref
       blockDownloader = ibdIF.registerForInitialBlockDownload(self)
       headersCallback = getAsyncCallback[(Int, List[BlockchainMessage])] {
         case ((received, reply)) =>

@@ -36,7 +36,7 @@ public class TransactionInput {
     public static class Builder {
         private Outpoint outpoint = Outpoint.COINBASE;
         private int sequence = -1;
-        private Script script = new Script();
+        private Script script = Script.EMPTY;
 
         public Builder source(Outpoint outpoint) {
             this.outpoint = outpoint;
